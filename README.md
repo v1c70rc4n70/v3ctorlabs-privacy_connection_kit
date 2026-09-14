@@ -45,6 +45,8 @@ cd /home/vik/privacy-connection-dashboard
 - Incluye `Conectar Tor` rapido: activa perfil Tor, escribe ProxyChains, prueba Tor, pide NEWNYM y refresca IP.
 - Incluye `VPN facil`: importa/sube WireGuard/OpenVPN mediante NetworkManager (`nmcli`) si esta disponible.
 - Incluye botones ON/OFF para Proton VPN y Surfshark cuando sus clientes CLI estan disponibles.
+- Incluye tres conexiones rapidas de un clic: `Default`, `Pro` y `Agresiva`.
+- Cada modo aplica sus filtros, selecciona un perfil, escribe `CONNECTING/LINK LIVE/LINK FAIL` y cambia la paleta completa del dashboard.
 - Proton soporta modos `fastest`, `country`, `secure-core`, `tor`, `p2p` y `random`.
 - Surfshark intenta usar `surfshark-vpn` o `surfshark`; si el paquete Snap esta bloqueado por AppArmor, usa `VPN facil` con WireGuard/OpenVPN manual.
 - Soporta variantes de proxy HTTP, HTTPS, SOCKS4, SOCKS5, Tor, WireGuard y OpenVPN.
@@ -150,6 +152,18 @@ El boton `Guia inicial` aparece durante las primeras 100 sesiones y permite ejec
 el ciclo recomendado: leer PC/Wi-Fi, consultar IP publica, probar un perfil,
 decidir el alcance, revisar la huella y analizar mejoras. Las sesiones y pasos se
 guardan en `~/.local/share/privacy-connection-dashboard/onboarding.json`.
+
+## Conexiones rapidas
+
+- `Default`: equilibrio con anonimato elite/anonymous, uptime minimo 80% y maximo 800 ms.
+- `Pro`: prioriza Tor/SOCKS5/VPN, anonimato elite, uptime minimo 90% y maximo 500 ms.
+- `Agresiva`: acepta todos los protocolos, uptime minimo 60% y maximo 1500 ms para encontrar una ruta operativa.
+
+Los botones cambian el color general del dashboard mientras conectan. Una prueba
+correcta cambia el estado a `LINK LIVE`, activa la variante viva de la paleta y
+registra el perfil y la futura comprobacion de IP. `Agresiva` puede seleccionar
+proxies transparentes si se han importado: revisa siempre la IP publica antes de
+usar cuentas o credenciales.
 
 El panel `PC / Wi-Fi` es informativo y no cambia rutas ni contraseñas. Un proxy
 HTTP/SOCKS solo afecta a la app que lo usa; `proxychains4`/`torsocks` afectan a las

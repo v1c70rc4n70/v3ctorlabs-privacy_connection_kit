@@ -87,6 +87,32 @@ PROXY_USE_CASES = (
     "OSINT ligero",
     "Descargas aisladas",
 )
+CONNECTION_MODE_CONFIGS: dict[str, dict[str, str]] = {
+    "default": {
+        "label": "DEFAULT",
+        "description": "Equilibrada: elite/anonymous, uptime 80% y latencia hasta 800 ms.",
+        "anonymity": "elite,anonymous",
+        "min_uptime": "80",
+        "max_latency": "800",
+        "protocol": "all",
+    },
+    "pro": {
+        "label": "PRO",
+        "description": "Restrictiva: prioriza elite, uptime 90% y latencia hasta 500 ms.",
+        "anonymity": "elite",
+        "min_uptime": "90",
+        "max_latency": "500",
+        "protocol": "socks5",
+    },
+    "aggressive": {
+        "label": "AGRESIVA",
+        "description": "Amplia: acepta todos los protocolos y prioriza encontrar una ruta operativa.",
+        "anonymity": "all",
+        "min_uptime": "60",
+        "max_latency": "1500",
+        "protocol": "all",
+    },
+}
 PROXY_TYPE_GUIDE: dict[str, dict[str, str]] = {
     "HTTP": {
         "profile_type": "http",
@@ -1822,6 +1848,8 @@ class Dashboard(tk.Tk):
         self.tor_rotation_active = False
         self.globe_angle = 0.0
         self.connection_phase = 0.0
+        self.connection_mode = "default"
+        self.connection_live = False
 
         self._configure_theme()
         self._build_ui()
@@ -1873,6 +1901,59 @@ class Dashboard(tk.Tk):
         style.configure("SuccessSub.TLabel", background="#062b20", foreground="#b8ffe8", font=("Inter", 10, "bold"))
         style.configure("TCheckbutton", background="#0b1020", foreground="#d9faff")
         style.map("TCheckbutton", background=[("active", "#111a33")], foreground=[("active", "#42ffbf")])
+        self.apply_connection_palette("default", live=False)
+
+    def apply_connection_palette(self, mode: str, live: bool = False) -> None:
+        palettes = {
+            "default": {
+                "root": "#050814", "panel": "#0b1020", "field": "#07111f", "canvas": "#02040c",
+                "text": "#d9faff", "muted": "#7be7ff", "accent": "#42ffbf", "secondary": "#1df2ff",
+                "alert_bg": "#1b0d2b", "alert": "#ff4fd8",
+            },
+            "pro": {
+                "root": "#07110d", "panel": "#0b1d18", "field": "#0a1715", "canvas": "#020a08",
+                "text": "#e6fff1", "muted": "#9ee8bf", "accent": "#b7ff4a", "secondary": "#4dffc8",
+                "alert_bg": "#182610", "alert": "#d7ff57",
+            },
+            "aggressive": {
+                "root": "#140806", "panel": "#24100c", "field": "#170b09", "canvas": "#080302",
+                "text": "#fff0e6", "muted": "#ffb38a", "accent": "#ff7a45", "secondary": "#ffbd4a",
+                "alert_bg": "#32100d", "alert": "#ff5364",
+            },
+        }
+        palette = palettes.get(mode, palettes["default"])
+        if live:
+            palette = dict(palette)
+            palette["accent"] = "#56ff9a"
+            palette["secondary"] = "#9dffcf"
+            palette["alert_bg"] = "#063322"
+            palette["alert"] = "#56ff9a"
+        self.configure(bg=palette["root"])
+        style = ttk.Style(self)
+        style.configure("TFrame", background=palette["root"])
+        style.configure("TLabel", background=palette["root"], foreground=palette["text"])
+        style.configure("TButton", background=palette["panel"], foreground=palette["text"], bordercolor=palette["secondary"])
+        style.map("TButton", background=[("active", palette["alert_bg"]), ("pressed", palette["field"])], foreground=[("active", palette["accent"])])
+        style.configure("TEntry", fieldbackground=palette["field"], foreground=palette["text"], insertcolor=palette["text"])
+        style.configure("TCombobox", fieldbackground=palette["field"], background=palette["panel"], foreground=palette["text"])
+        style.configure("Treeview", background=palette["field"], fieldbackground=palette["field"], foreground=palette["text"], bordercolor=palette["secondary"])
+        style.configure("Treeview.Heading", background=palette["panel"], foreground=palette["accent"], bordercolor=palette["alert"])
+        style.map("Treeview", background=[("selected", palette["alert_bg"])], foreground=[("selected", "#ffffff")])
+        style.configure("Panel.TFrame", background=palette["panel"], bordercolor=palette["secondary"])
+        style.configure("Header.TLabel", background=palette["root"], foreground=palette["accent"])
+        style.configure("Muted.TLabel", background=palette["root"], foreground=palette["muted"])
+        style.configure("Status.TLabel", background=palette["panel"], foreground=palette["alert"])
+        style.configure("Alert.TLabel", background=palette["alert_bg"], foreground=palette["alert"])
+        style.configure("AlertSub.TLabel", background=palette["alert_bg"], foreground=palette["accent"])
+        style.configure("Success.TLabel", background="#063322", foreground="#56ff9a")
+        style.configure("SuccessSub.TLabel", background="#063322", foreground="#b8ffe8")
+        style.configure("TCheckbutton", background=palette["panel"], foreground=palette["text"])
+        style.map("TCheckbutton", background=[("active", palette["alert_bg"])], foreground=[("active", palette["accent"])])
+        self.palette = palette
+        if hasattr(self, "globe_canvas"):
+            self.globe_canvas.configure(bg=palette["canvas"])
+        if hasattr(self, "console"):
+            self.console.configure(bg=palette["field"], fg=palette["accent"], insertbackground=palette["alert"])
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -1893,6 +1974,19 @@ class Dashboard(tk.Tk):
         ttk.Button(toolbar, text="Probar seleccionado", command=self.test_selected).grid(row=0, column=2, padx=4)
         ttk.Button(toolbar, text="Activar perfil", command=self.activate_selected).grid(row=0, column=3, padx=4)
         ttk.Button(toolbar, text="Guardar", command=self.save_plain).grid(row=0, column=4, padx=4)
+        self.connection_mode_var = tk.StringVar(value="MODO DEFAULT · listo")
+        ttk.Label(toolbar, textvariable=self.connection_mode_var, style="Status.TLabel").grid(
+            row=1, column=0, columnspan=2, sticky="e", padx=4, pady=(6, 0)
+        )
+        ttk.Button(toolbar, text="Default 1-click", command=lambda: self.quick_connect("default")).grid(
+            row=1, column=2, padx=4, pady=(6, 0)
+        )
+        ttk.Button(toolbar, text="Pro 1-click", command=lambda: self.quick_connect("pro")).grid(
+            row=1, column=3, padx=4, pady=(6, 0)
+        )
+        ttk.Button(toolbar, text="Agresiva 1-click", command=lambda: self.quick_connect("aggressive")).grid(
+            row=1, column=4, padx=4, pady=(6, 0)
+        )
 
         body = ttk.Frame(self, padding=(18, 8, 18, 18))
         body.grid(row=1, column=0, sticky="nsew")
@@ -2554,6 +2648,54 @@ class Dashboard(tk.Tk):
             remaining = max(0, int((expires - datetime.now().astimezone()).total_seconds()))
             return f"PRUEBA ACTIVA · quedan {human_duration(remaining)} · luego lifetime desde 5 EUR"
         return "PRUEBA pendiente · lifetime desde 5 EUR"
+
+    def apply_connection_mode(self, mode: str) -> None:
+        config = CONNECTION_MODE_CONFIGS[mode]
+        self.connection_mode = mode
+        self.connection_live = False
+        self.connection_mode_var.set(f"MODO {config['label']} · CONNECTING")
+        self.discovery_fields["source"].set("Todas")
+        self.discovery_fields["protocol"].set(config["protocol"])
+        self.discovery_fields["anonymity"].set(config["anonymity"])
+        self.discovery_fields["min_uptime"].set(config["min_uptime"])
+        self.discovery_fields["max_latency"].set(config["max_latency"])
+        self.apply_connection_palette(mode, live=False)
+        self.log(f"MODO {config['label']}: {config['description']}")
+
+    def select_profile_for_mode(self, mode: str) -> ConnectionProfile | None:
+        if not self.profiles:
+            self.add_tor_profile(log=False)
+        profiles = list(self.profiles)
+        if mode == "pro":
+            candidates = [item for item in profiles if item.type in {"tor", "socks5", "wireguard", "openvpn"}]
+            candidates.sort(key=lambda item: (0 if item.type == "tor" else 1, item.latency_ms or 999999))
+        elif mode == "aggressive":
+            candidates = sorted(
+                profiles,
+                key=lambda item: (0 if item.status == "ok" else 1, item.latency_ms or 999999),
+            )
+        else:
+            candidates = [item for item in profiles if item.active] or profiles
+        selected = candidates[0] if candidates else None
+        if selected:
+            self.selected_id = selected.id
+            for item in self.profiles:
+                item.active = item.id == selected.id
+            self.refresh_tree()
+            self.on_select()
+        return selected
+
+    def quick_connect(self, mode: str) -> None:
+        if mode not in CONNECTION_MODE_CONFIGS:
+            return
+        self.apply_connection_mode(mode)
+        profile = self.select_profile_for_mode(mode)
+        if not profile:
+            self.connection_mode_var.set(f"MODO {CONNECTION_MODE_CONFIGS[mode]['label']} · SIN PERFIL")
+            self.log("CONNECT FAIL: no hay perfil disponible para el modo rapido.")
+            return
+        self.log(f"CONNECTING 1-click: modo={mode}, perfil={profile.name}, tipo={profile.type}.")
+        self.complete_connection_flow()
 
     def open_coffee_link(self) -> None:
         payment_url = os.environ.get(STRIPE_PAYMENT_LINK_ENV, "").strip()
@@ -3435,6 +3577,21 @@ class Dashboard(tk.Tk):
                         profile.last_test = time.strftime("%Y-%m-%d %H:%M:%S")
                         self.refresh_tree()
                         self.log(f"{profile.name}: {profile.status}. {detail}")
+                        if ok:
+                            self.connection_live = True
+                            self.connection_mode_var.set(
+                                f"MODO {CONNECTION_MODE_CONFIGS[self.connection_mode]['label']} · LINK LIVE"
+                            )
+                            self.apply_connection_palette(self.connection_mode, live=True)
+                            self.log(
+                                f"LINK LIVE: {profile.name} conectado · IP publica se refrescara · paleta activa {self.connection_mode}."
+                            )
+                        else:
+                            self.connection_live = False
+                            self.connection_mode_var.set(
+                                f"MODO {CONNECTION_MODE_CONFIGS[self.connection_mode]['label']} · LINK FAIL"
+                            )
+                            self.apply_connection_palette(self.connection_mode, live=False)
                 elif event == "local_telemetry_result":
                     self.update_local_telemetry(payload)
                 elif event == "import_result":
@@ -3498,6 +3655,12 @@ class Dashboard(tk.Tk):
                     if output:
                         self.log(output[-1200:])
                     if returncode == 0 and "VPN" in label:
+                        self.connection_live = True
+                        self.connection_mode_var.set(
+                            f"MODO {CONNECTION_MODE_CONFIGS[self.connection_mode]['label']} · LINK LIVE"
+                        )
+                        self.apply_connection_palette(self.connection_mode, live=True)
+                        self.log(f"LINK LIVE: {label} · paleta activa {self.connection_mode}.")
                         self.after(4000, self.refresh_public_ip)
         except queue.Empty:
             pass
@@ -3726,6 +3889,10 @@ class Dashboard(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def disconnect_anonymous(self) -> None:
+        self.connection_live = False
+        self.connection_mode = "default"
+        self.connection_mode_var.set("MODO DEFAULT · desconectado")
+        self.apply_connection_palette("default", live=False)
         for item in self.profiles:
             item.active = False
         self.refresh_tree()
