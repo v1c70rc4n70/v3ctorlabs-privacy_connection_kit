@@ -1335,6 +1335,7 @@ class MapWriter:
         point_count = len(points)
         history_count = sum(1 for point in points if point.get("kind") == "Historial")
         proxy_count = sum(1 for point in points if point.get("kind") not in {"Historial", "IP publica"})
+        live_status = "LINK LIVE MAP" if current_ip else "MAPA EN ESPERA"
         rows = []
         for index, point in enumerate(points):
             opacity = str(point.get("opacity", 1))
@@ -1380,6 +1381,8 @@ class MapWriter:
     }}
     h1 {{ margin: 0; font-size: 24px; color: #42ffbf; text-shadow: 0 0 18px rgba(66,255,191,.42); }}
     .warning {{ margin-top: 6px; color: #ff4fd8; font-weight: 800; }}
+    .live-badge {{ display: inline-block; margin-top: 10px; padding: 7px 11px; color: #06130d; background: #56ff9a; font-weight: 900; letter-spacing: .04em; box-shadow: 0 0 22px rgba(86,255,154,.5); animation: livePulse 1.4s ease-in-out infinite; }}
+    @keyframes livePulse {{ 0%, 100% {{ transform: scale(1); opacity: .86; }} 50% {{ transform: scale(1.025); opacity: 1; }} }}
     .hud {{ display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }}
     .metric {{ min-width: 92px; padding: 8px 10px; border: 1px solid rgba(29,242,255,.42); background: rgba(11,16,32,.74); box-shadow: inset 0 0 18px rgba(29,242,255,.08); }}
     .metric b {{ display: block; color: #42ffbf; font-size: 18px; }}
@@ -1415,6 +1418,7 @@ class MapWriter:
   <header>
     <div>
       <h1>IP visible publicada: {escape(current_ip or "sin consultar")}</h1>
+      <div class="live-badge">● {escape(live_status)} · GEO ROUTE ACTIVE</div>
       <div class="warning">Aviso: la IP pública visible puede exponer ubicación aproximada, ISP/ASN y señales de proxy/VPN/Tor.</div>
     </div>
     <div class="hud">
@@ -2244,8 +2248,10 @@ class Dashboard(tk.Tk):
         ttk.Button(ip_panel, text="Analizar mejoras", command=self.show_improvement_report).grid(
             row=16, column=2, columnspan=2, sticky="ew", pady=(8, 0), padx=(5, 0)
         )
+        self.live_map_button = ttk.Button(ip_panel, text="MAPA LINK LIVE", command=self.open_live_map)
+        self.live_map_button.grid(row=17, column=0, columnspan=4, sticky="ew", pady=(8, 0))
         self.globe_canvas = tk.Canvas(ip_panel, width=230, height=230, bg="#07111f", highlightthickness=0)
-        self.globe_canvas.grid(row=0, column=4, rowspan=17, sticky="nse", padx=(12, 0))
+        self.globe_canvas.grid(row=0, column=4, rowspan=18, sticky="nse", padx=(12, 0))
 
         editor = ttk.Frame(right, style="Panel.TFrame", padding=16)
         editor.grid(row=1, column=0, sticky="ew", pady=(10, 0))
@@ -2611,6 +2617,7 @@ class Dashboard(tk.Tk):
             self.ip_vars["public_notice"].set(
                 "LINK LIVE · SALIDA PROTEGIDA DETECTADA · IP visible actualizada · verifica DNS/WebRTC"
             )
+            self.live_map_button.configure(text="● MAPA LINK LIVE · GEO ROUTE ACTIVE")
         else:
             self.ip_alert_label.configure(style="Alert.TLabel")
             self.ip_alert_sub_label.configure(style="AlertSub.TLabel")
@@ -2618,6 +2625,7 @@ class Dashboard(tk.Tk):
             self.ip_vars["public_notice"].set(
                 "PUBLICANDO AHORA: esta es la IP que ven webs y servicios externos."
             )
+            self.live_map_button.configure(text="MAPA LINK LIVE · STANDBY")
         history = history if history is not None else self.ip_history_store.load()
         if history:
             first_seen = parse_iso(str(history[-1].get("first_seen") or ""))
@@ -2759,6 +2767,7 @@ class Dashboard(tk.Tk):
         ).pack(fill="x", padx=18)
         actions = ttk.Frame(window)
         actions.pack(fill="x", padx=18, pady=18)
+        ttk.Button(actions, text="Mapa LINK LIVE", command=self.open_live_map).pack(side="left")
         ttk.Button(actions, text="Pagar lifetime 5+ EUR", command=self.open_coffee_link).pack(side="left")
         ttk.Button(actions, text="Ver huella", command=self.show_fingerprint_report).pack(side="left", padx=8)
         ttk.Button(actions, text="Cerrar", command=window.destroy).pack(side="right")
@@ -2971,6 +2980,18 @@ class Dashboard(tk.Tk):
         path = MapWriter.write_globe(points, current_ip=current_ip)
         webbrowser.open(path.as_uri())
         self.log(f"Globo interactivo generado: {path}")
+
+    def open_live_map(self) -> None:
+        if not self.current_snapshot:
+            self.log("LINK LIVE MAP: falta IP publica; refrescando antes de abrir el mapa.")
+            self.refresh_public_ip()
+            return
+        points = self.globe_points()
+        path = MapWriter.write_globe(points, current_ip=self.current_snapshot.ip)
+        webbrowser.open(path.as_uri())
+        self.log(
+            f"LINK LIVE MAP abierto: IP={self.current_snapshot.ip} · nodos={len(points)} · modo={self.connection_mode}."
+        )
 
     def open_country_map(self) -> None:
         selected_country = self.discovery_fields["country"].get().strip()

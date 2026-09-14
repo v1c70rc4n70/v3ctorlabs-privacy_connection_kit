@@ -28,6 +28,7 @@ cd /home/vik/privacy-connection-dashboard
 - Lee en modo solo lectura la interfaz de salida, Wi-Fi/SSID si el sistema lo expone, DNS, interfaces y conexiones NetworkManager.
 - Incluye una guia paso a paso para los primeros 100 usos: configurar, testear, verificar alcance, revisar huella y proponer mejoras.
 - La guia avanza automaticamente despues de cada paso y termina con una alerta visual `LINK LIVE`, estado verde, pulgar arriba y aplausos.
+- El boton `MAPA LINK LIVE` abre el globo y mapa con badge vivo, IP actual, rutas geo, nodos, historial difuminado y estado `GEO ROUTE ACTIVE`.
 - Incluye `Pagar lifetime 5+ EUR` con Checkout de Stripe configurable mediante `V3CTORLABS_STRIPE_PAYMENT_LINK`.
 - Genera un informe de huella digital separando datos medidos, posibles observables del navegador y limites del dashboard.
 - Conserva memoria local de sesiones guiadas, telemetria, tests e historial para recomendar mejoras operativas.
