@@ -54,6 +54,7 @@ EXTERNAL_CRYPTO_LINK_ENVS = {
 APP_DIR = Path.home() / ".local" / "share" / "privacy-connection-dashboard"
 PAYMENT_STATE_FILE = APP_DIR / "payment-state.json"
 LIFETIME_MINIMUM_EUR = 5
+DEFAULT_IP_HISTORY_LIMIT = 500
 CONFIG_FILE = APP_DIR / "profiles.json"
 ENCRYPTED_CONFIG_FILE = APP_DIR / "profiles.enc"
 SALT_FILE = APP_DIR / "salt.bin"
@@ -1002,6 +1003,10 @@ class IpHistoryStore:
 
     def record(self, snapshot: IpGeoSnapshot) -> tuple[list[dict[str, Any]], bool]:
         history = self.load()
+        try:
+            max_entries = max(10, int(os.environ.get("V3CTORLABS_MAX_IP_HISTORY", str(DEFAULT_IP_HISTORY_LIMIT))))
+        except ValueError:
+            max_entries = DEFAULT_IP_HISTORY_LIMIT
         changed = True
         if history and history[-1].get("ip") == snapshot.ip:
             history[-1]["last_seen"] = snapshot.observed_at
@@ -1018,6 +1023,8 @@ class IpHistoryStore:
                     "snapshot": snapshot.to_dict(),
                 }
             )
+        if len(history) > max_entries:
+            history = history[-max_entries:]
         self.save(history)
         return history, changed
 
@@ -2333,7 +2340,7 @@ class Dashboard(tk.Tk):
         ttk.Button(ip_panel, text="Huella digital", command=self.show_fingerprint_report).grid(
             row=16, column=0, columnspan=2, sticky="ew", pady=(8, 0), padx=(0, 5)
         )
-        ttk.Button(ip_panel, text="Analizar mejoras", command=self.show_improvement_report).grid(
+        ttk.Button(ip_panel, text="Aplicar mejoras", command=self.apply_all_improvements).grid(
             row=16, column=2, columnspan=2, sticky="ew", pady=(8, 0), padx=(5, 0)
         )
         self.live_map_button = ttk.Button(ip_panel, text="MAPA LINK LIVE", command=self.open_live_map)
@@ -2617,6 +2624,52 @@ class Dashboard(tk.Tk):
         self.show_text_window("Ambitos de mejora", self.improvement_report())
         self.log("Analisis de mejoras generado con historial y tests locales.")
 
+    def apply_all_improvements(self) -> None:
+        """Apply safe local improvements, then start the verification cycle."""
+        applied: list[str] = []
+        self.log("MEJORAS: iniciando analisis y aplicacion automatica...")
+
+        # Keep discovery broad enough to find a usable route while retaining
+        # the safer default anonymity and latency filters.
+        self.set_fast_defaults()
+        applied.append("filtros rapidos y anonimato elite/anonymous")
+
+        if not self.profiles:
+            self.add_tor_profile(log=False)
+            applied.append("perfil Tor local")
+            self.log("MEJORA APLICADA: perfil Tor local creado.")
+
+        profile = self.select_profile_for_mode("default")
+        if profile:
+            self.log(f"MEJORA: perfil seleccionado para verificar: {profile.name} ({profile.type}).")
+            if profile.type in {"http", "https", "socks4", "socks5", "tor"}:
+                self.activate_selected()
+                if self.write_proxychains_config():
+                    applied.append("ProxyChains local")
+                self.test_selected()
+                applied.append(f"test de conectividad de {profile.name}")
+            elif profile.type in {"wireguard", "openvpn"}:
+                self.log(
+                    "MEJORA PENDIENTE: VPN detectada; pulsa VPN facil para activar la ruta del PC "
+                    "con permisos de NetworkManager."
+                )
+            self.save_plain()
+            applied.append("perfiles guardados localmente")
+        else:
+            self.log("MEJORA PENDIENTE: no hay un perfil seleccionable para probar.")
+
+        self.refresh_local_telemetry()
+        self.refresh_public_ip()
+        applied.extend(["telemetria local", "IP publica e historial"])
+        self.log(
+            "MEJORAS APLICADAS: " + ", ".join(applied) + "."
+        )
+        self.log(
+            "MEJORA PENDIENTE: verifica DNS, IPv6 y WebRTC desde el navegador; "
+            "el dashboard no puede validarlos por si solo."
+        )
+        self.after(650, self.show_improvement_report)
+
     def maybe_show_onboarding(self) -> None:
         sessions = int(self.onboarding_state.get("sessions") or 0) + 1
         self.onboarding_state["sessions"] = sessions
@@ -2696,7 +2749,7 @@ class Dashboard(tk.Tk):
         actions = ttk.Frame(window)
         actions.grid(row=2, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 14))
         ttk.Button(actions, text="Ejecutar paso", command=run_step).pack(side="left")
-        ttk.Button(actions, text="Analizar mejoras", command=self.show_improvement_report).pack(side="left", padx=8)
+        ttk.Button(actions, text="Aplicar mejoras", command=self.apply_all_improvements).pack(side="left", padx=8)
         ttk.Button(actions, text="Cerrar", command=window.destroy).pack(side="right")
         render(0)
         if auto:
@@ -2711,7 +2764,10 @@ class Dashboard(tk.Tk):
         self.current_snapshot = snapshot
         protected = snapshot.is_tor or snapshot.is_vpn or snapshot.is_proxy
         ip_prefix = "IP PUBLICA CAMBIADA" if changed else "IP publica"
-        self.ip_vars["ip"].set(f"{ip_prefix}: {snapshot.ip} ({snapshot.provider})")
+        protection_label = "SI" if protected else "NO"
+        self.ip_vars["ip"].set(
+            f"IP PROTEGIDA: {protection_label} · {ip_prefix}: {snapshot.ip} ({snapshot.provider})"
+        )
         self.ip_vars["location"].set(
             f"Ubicacion: {snapshot.full_location_line} · {snapshot.latitude}, {snapshot.longitude} · {snapshot.timezone}"
         )
@@ -2748,7 +2804,11 @@ class Dashboard(tk.Tk):
             first_seen = parse_iso(str(history[-1].get("first_seen") or ""))
             if first_seen:
                 elapsed = datetime.now().astimezone() - first_seen
-                self.ip_vars["since_change"].set(f"Desde cambio: {human_duration(elapsed.total_seconds())}")
+                self.ip_vars["since_change"].set(
+                    f"Desde cambio: {human_duration(elapsed.total_seconds())} · Historial IP: {len(history)}/{DEFAULT_IP_HISTORY_LIMIT} max"
+                )
+        else:
+            self.ip_vars["since_change"].set(f"Desde cambio: - · Historial IP: 0/{DEFAULT_IP_HISTORY_LIMIT} max")
 
     def ensure_trial_window(self) -> None:
         if self.payment_state.get("trial_started"):
@@ -3162,9 +3222,13 @@ class Dashboard(tk.Tk):
         profile = self.get_selected()
         lines = []
         if snapshot:
+            history = self.ip_history_store.load()
             lines.extend(
                 [
+                    f"IP PROTEGIDA: {'SI' if (snapshot.is_tor or snapshot.is_vpn or snapshot.is_proxy) else 'NO'}",
                     f"IP PUBLICA VISIBLE: {snapshot.ip}",
+                    f"Direccion geo completa estimada: {snapshot.full_location_line}",
+                    f"Historial IPs: {len(history)}/{DEFAULT_IP_HISTORY_LIMIT} max",
                     f"Ubicacion: {snapshot.location_line}",
                     f"Region: {snapshot.region or '-'}",
                     f"Barrio/distrito: {snapshot.neighborhood or snapshot.district or '-'}",
@@ -3406,7 +3470,7 @@ class Dashboard(tk.Tk):
     def show_ip_history(self) -> None:
         history = self.ip_history_store.load()
         win = tk.Toplevel(self)
-        win.title("Historial de IP publica")
+        win.title(f"Historial de IP publica · max {DEFAULT_IP_HISTORY_LIMIT}")
         win.geometry("1500x520")
         win.columnconfigure(0, weight=1)
         win.rowconfigure(0, weight=1)

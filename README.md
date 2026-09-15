@@ -22,8 +22,10 @@ cd /home/vik/privacy-connection-dashboard
 - Amplia la ficha IP con region, ciudad, barrio/distrito, plaza, calle, carretera/road, codigo postal, ISP, empresa registrada, dominio y red CIDR cuando existen.
 - Enriquece las coordenadas con OpenStreetMap/Nominatim para etiquetas de calle y barrio estimadas; nunca presenta una IP como domicilio exacto.
 - Resalta de forma llamativa la IP publica que estas publicando hacia Internet.
+- Muestra en grande `IP PROTEGIDA: SI/NO`, la IP publica, direccion geo completa estimada y contador de historial.
 - Guarda historial de cambios de IP publica con tiempo desde cada cambio observado.
 - El historial conserva snapshots completos de IP, ISP, region, ciudad, barrio, calle/road, coordenadas, flags y primer/ultimo visto.
+- El historial queda limitado a 500 IPs por defecto; puedes cambiarlo con `V3CTORLABS_MAX_IP_HISTORY`.
 - Genera mapa local con OpenStreetMap para la IP actual con estilo oscuro `v3ctorlabs`.
 - Genera un globo del mundo interactivo local para IP publica, historial e IPs de proxies geolocalizadas.
 - Muestra un globo animado dentro del dashboard con campo estelar, halo, reticula, pulsos y rutas entre nodos.
@@ -37,6 +39,7 @@ cd /home/vik/privacy-connection-dashboard
 - Bitcoin nativo y SOL nativo se tratan como enlaces externos opcionales, no como metodos Stripe garantizados.
 - Genera un informe de huella digital separando datos medidos, posibles observables del navegador y limites del dashboard.
 - Conserva memoria local de sesiones guiadas, telemetria, tests e historial para recomendar mejoras operativas.
+- `Aplicar mejoras` ejecuta las recomendaciones seguras detectadas: defaults, perfil seleccionable, ProxyChains, test, guardado, telemetria, IP e historial; deja en el log las verificaciones manuales pendientes.
 - En el globo grande puedes arrastrar para rotar, usar rueda para zoom y pulsar una IP para ver detalle, mapa con zoom y enlace a Google Maps.
 - El globo grande incluye HUD con nodos geo, historial, proxies, rutas luminosas desde la IP visible y filas clicables.
 - Los puntos de historial antiguo aparecen difuminados para distinguirlos de la IP actual.
