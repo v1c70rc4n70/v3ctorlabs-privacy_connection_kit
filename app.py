@@ -1941,6 +1941,7 @@ class Dashboard(tk.Tk):
         self.connection_phase = 0.0
         self.connection_mode = "default"
         self.connection_live = False
+        self.recent_log_lines: list[str] = []
 
         self._configure_theme()
         self._build_ui()
@@ -2395,10 +2396,11 @@ class Dashboard(tk.Tk):
         console_panel.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
         console_panel.rowconfigure(1, weight=1)
         console_panel.columnconfigure(0, weight=1)
-        ttk.Label(console_panel, text="Registro v3ctorlabs y comandos", style="Status.TLabel").grid(row=0, column=0, sticky="w")
+        self.log_status_var = tk.StringVar(value="Ultimo estado: esperando una accion")
+        ttk.Label(console_panel, textvariable=self.log_status_var, style="Status.TLabel").grid(row=0, column=0, sticky="w")
         self.console = tk.Text(
             console_panel,
-            height=12,
+            height=5,
             wrap="word",
             relief="flat",
             bg="#050814",
@@ -2408,6 +2410,10 @@ class Dashboard(tk.Tk):
         )
         self.console.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         self.console.configure(state="disabled")
+        ttk.Button(console_panel, text="Abrir log completo", command=self.show_full_log).grid(
+            row=2, column=0, sticky="e", pady=(8, 0)
+        )
+        self.bind_all("<ButtonPress-1>", self._log_button_click, add="+")
 
     def _label_entry(self, parent: ttk.Frame, row: int, label: str, key: str) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=5)
@@ -2430,10 +2436,17 @@ class Dashboard(tk.Tk):
 
     def log(self, message: str) -> None:
         stamp = time.strftime("%H:%M:%S")
-        self.console.configure(state="normal")
-        self.console.insert("end", f"[{stamp}] [{BRAND_NAME}] {message}\n")
-        self.console.see("end")
-        self.console.configure(state="disabled")
+        line = f"[{stamp}] [{BRAND_NAME}] {message}"
+        self.recent_log_lines.append(line)
+        self.recent_log_lines = self.recent_log_lines[-5:]
+        if hasattr(self, "console"):
+            self.console.configure(state="normal")
+            self.console.delete("1.0", "end")
+            self.console.insert("end", "\n".join(self.recent_log_lines) + "\n")
+            self.console.see("end")
+            self.console.configure(state="disabled")
+        if hasattr(self, "log_status_var"):
+            self.log_status_var.set(f"Ultimo estado: {message}")
         try:
             APP_DIR.mkdir(parents=True, exist_ok=True)
             with AUDIT_LOG_FILE.open("a", encoding="utf-8") as handle:
@@ -2441,6 +2454,23 @@ class Dashboard(tk.Tk):
             chmod_private(AUDIT_LOG_FILE)
         except OSError:
             pass
+
+    def _log_button_click(self, event: tk.Event) -> None:
+        widget = event.widget
+        try:
+            if widget.winfo_class() != "TButton":
+                return
+            label = str(widget.cget("text") or "boton")
+            self.log(f"CLICK: {label}")
+        except (tk.TclError, AttributeError):
+            return
+
+    def show_full_log(self) -> None:
+        try:
+            content = AUDIT_LOG_FILE.read_text(encoding="utf-8")
+        except OSError:
+            content = "Todavia no hay log persistente."
+        self.show_text_window("Registro completo v3ctorlabs", content)
 
     def refresh_local_telemetry(self) -> None:
         self.log("Leyendo interfaces, Wi-Fi, ruta y DNS locales (solo lectura)...")

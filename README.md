@@ -44,6 +44,7 @@ cd /home/vik/privacy-connection-dashboard
 - Incluye `Guia proxies` dinamica dentro del dashboard: selecciona HTTP, HTTPS, SOCKS4, SOCKS5, Tor, WireGuard, OpenVPN, transparente, anonymous, elite, reverse, rotativo, residencial o datacenter.
 - La guia permite aplicar el tipo al perfil seleccionado, aplicar filtros de busqueda, cambiar el uso recomendado o activar `Todos los tipos`.
 - Usa tema ciberpunk `v3ctorlabs` con paneles oscuros, acentos neon y registro visible firmado.
+- Mantiene una consola fija inferior con las 5 ultimas lineas y registra cada click de boton como `CLICK: ...`; `Abrir log completo` muestra el historial persistente.
 - Guarda un registro local de acciones en `~/.local/share/privacy-connection-dashboard/v3ctorlabs-registro.log`.
 - Genera comandos y snippet para ProxyChains, torsocks y torify.
 - Escribe `proxychains.conf` local y lanza Chromium con ProxyChains o torsocks.
