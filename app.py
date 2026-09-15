@@ -916,11 +916,22 @@ class IpGeoSnapshot:
     country_code: str = ""
     region: str = ""
     city: str = ""
+    district: str = ""
+    neighborhood: str = ""
+    street: str = ""
+    road: str = ""
+    square: str = ""
+    postal_code: str = ""
+    address_precision: str = ""
     latitude: float | None = None
     longitude: float | None = None
     timezone: str = ""
     isp: str = ""
     org: str = ""
+    company: str = ""
+    company_type: str = ""
+    company_domain: str = ""
+    network_cidr: str = ""
     asn: str = ""
     reverse_dns: str = ""
     currency: str = ""
@@ -935,6 +946,15 @@ class IpGeoSnapshot:
     def location_line(self) -> str:
         parts = [part for part in (self.city, self.region, self.country_code or self.country) if part]
         return ", ".join(parts) or "sin ubicacion"
+
+    @property
+    def address_line(self) -> str:
+        parts = [part for part in (self.square, self.road or self.street, self.neighborhood, self.district, self.postal_code) if part]
+        return " · ".join(parts) or "detalle de calle no disponible"
+
+    @property
+    def full_location_line(self) -> str:
+        return f"{self.location_line} · {self.address_line}"
 
     @property
     def flags_line(self) -> str:
@@ -1013,9 +1033,9 @@ class IpGeoService:
     def lookup(target: str = "my") -> IpGeoSnapshot:
         target = target.strip() or "my"
         try:
-            return IpGeoService.lookup_ipaddress_to(target)
+            return IpGeoService.enrich_address(IpGeoService.lookup_ipaddress_to(target))
         except Exception:
-            return IpGeoService.lookup_ip_api("" if target == "my" else target)
+            return IpGeoService.enrich_address(IpGeoService.lookup_ip_api("" if target == "my" else target))
 
     @staticmethod
     def lookup_ipaddress_to(target: str) -> IpGeoSnapshot:
@@ -1032,11 +1052,22 @@ class IpGeoService:
             country_code=str(location.get("country_code") or ""),
             region=str(location.get("state") or location.get("region") or ""),
             city=str(location.get("city") or ""),
+            district=str(location.get("district") or ""),
+            neighborhood=str(location.get("neighborhood") or location.get("neighbourhood") or ""),
+            street=str(location.get("street") or ""),
+            road=str(location.get("road") or ""),
+            square=str(location.get("square") or ""),
+            postal_code=str(location.get("postal_code") or location.get("postalCode") or location.get("zip") or ""),
+            address_precision="IP provider coordinates; street fields estimated if enriched",
             latitude=to_float(location.get("latitude")),
             longitude=to_float(location.get("longitude")),
             timezone=str(location.get("timezone") or ""),
-            isp=str(company.get("name") or asn.get("org") or ""),
+            isp=str(raw.get("isp") or asn.get("org") or company.get("name") or ""),
             org=str(asn.get("org") or company.get("name") or ""),
+            company=str(company.get("name") or ""),
+            company_type=str(company.get("type") or ""),
+            company_domain=str(company.get("domain") or ""),
+            network_cidr=str(company.get("network") or ""),
             asn=str(asn.get("asn") or ""),
             reverse_dns=str(raw.get("rdns") or ""),
             currency=str((location.get("currency") or {}).get("code") or ""),
@@ -1046,6 +1077,43 @@ class IpGeoService:
             is_hosting=bool(raw.get("is_hosting")),
             raw=raw,
         )
+
+    @staticmethod
+    def enrich_address(snapshot: IpGeoSnapshot) -> IpGeoSnapshot:
+        """Add approximate OSM address labels; IP geolocation is never an exact address."""
+        if snapshot.latitude is None or snapshot.longitude is None:
+            return snapshot
+        params = urlencode(
+            {
+                "format": "jsonv2",
+                "lat": snapshot.latitude,
+                "lon": snapshot.longitude,
+                "zoom": 18,
+                "addressdetails": 1,
+            }
+        )
+        try:
+            raw = IpGeoService.fetch_json(
+                f"https://nominatim.openstreetmap.org/reverse?{params}", timeout=8.0
+            )
+            address = raw.get("address") or {}
+            snapshot.district = str(address.get("city_district") or address.get("district") or snapshot.district)
+            snapshot.neighborhood = str(
+                address.get("neighbourhood") or address.get("suburb") or address.get("quarter") or snapshot.neighborhood
+            )
+            snapshot.street = str(address.get("road") or address.get("street") or snapshot.street)
+            snapshot.road = str(address.get("road") or address.get("highway") or snapshot.road)
+            snapshot.square = str(address.get("square") or "")
+            snapshot.postal_code = str(address.get("postcode") or snapshot.postal_code)
+            snapshot.address_precision = "estimada por coordenadas IP + OpenStreetMap; no es domicilio exacto"
+            snapshot.raw["reverse_geocode"] = {
+                "provider": "OpenStreetMap Nominatim",
+                "display_name": raw.get("display_name", ""),
+                "address": address,
+            }
+        except Exception:
+            snapshot.address_precision = snapshot.address_precision or "calle/barrio no disponible"
+        return snapshot
 
 
     @staticmethod
@@ -1066,11 +1134,15 @@ class IpGeoService:
             country_code=str(raw.get("countryCode") or ""),
             region=str(raw.get("regionName") or raw.get("region") or ""),
             city=str(raw.get("city") or ""),
+            district=str(raw.get("district") or ""),
+            postal_code=str(raw.get("zip") or ""),
+            address_precision="IP provider coordinates; street fields estimated if enriched",
             latitude=to_float(raw.get("lat")),
             longitude=to_float(raw.get("lon")),
             timezone=str(raw.get("timezone") or ""),
             isp=str(raw.get("isp") or ""),
             org=str(raw.get("org") or ""),
+            company=str(raw.get("org") or ""),
             asn=str(raw.get("as") or raw.get("asname") or ""),
             reverse_dns=str(raw.get("reverse") or ""),
             currency=str(raw.get("currency") or ""),
@@ -1241,11 +1313,12 @@ class MapWriter:
             "ip": snapshot.ip,
             "lat": snapshot.latitude,
             "lon": snapshot.longitude,
-            "location": snapshot.location_line,
+            "location": snapshot.full_location_line,
             "country": snapshot.country_code or snapshot.country,
             "network": f"ASN {snapshot.asn or '-'} · {snapshot.isp or snapshot.org or '-'}",
             "flags": snapshot.flags_line,
             "seen": snapshot.observed_at,
+            "precision": snapshot.address_precision,
         }
 
     @staticmethod
@@ -1285,6 +1358,10 @@ class MapWriter:
                 f"<td>{escape(str(item.get('ip', '')))}</td>"
                 f"<td>{escape(str(snap.get('city', '')))}</td>"
                 f"<td>{escape(str(snap.get('country_code', '')))}</td>"
+                f"<td>{escape(str(snap.get('region', '')))}</td>"
+                f"<td>{escape(str(snap.get('neighborhood', '') or snap.get('district', '')))}</td>"
+                f"<td>{escape(str(snap.get('road', '') or snap.get('street', '')))}</td>"
+                f"<td>{escape(str(snap.get('isp', '') or snap.get('org', '')))}</td>"
                 f"<td>{escape(str(first_seen))}</td>"
                 f"<td>{escape(str(last_seen))}</td>"
                 "</tr>"
@@ -1321,14 +1398,14 @@ class MapWriter:
 </head>
 <body>
   <header>
-    <h1>{escape(snapshot.ip)} - {escape(snapshot.location_line)}</h1>
-    <div class="meta">{escape(snapshot.provider)} · {escape(snapshot.isp)} · {escape(snapshot.flags_line)}</div>
+    <h1>{escape(snapshot.ip)} - {escape(snapshot.full_location_line)}</h1>
+    <div class="meta">{escape(snapshot.provider)} · ISP {escape(snapshot.isp)} · {escape(snapshot.flags_line)} · {escape(snapshot.address_precision)}</div>
   </header>
   <iframe src="{escape(iframe)}"></iframe>
   <section>
     <h2>Historial observado</h2>
     <table>
-      <thead><tr><th>IP</th><th>Ciudad</th><th>País</th><th>Primer visto</th><th>Último visto</th></tr></thead>
+      <thead><tr><th>IP</th><th>Ciudad</th><th>País</th><th>Región</th><th>Barrio/distrito</th><th>Calle/carretera</th><th>ISP</th><th>Primer visto</th><th>Último visto</th></tr></thead>
       <tbody>{''.join(rows)}</tbody>
     </table>
   </section>
@@ -1470,7 +1547,7 @@ class MapWriter:
       return `https://www.google.com/maps/search/?api=1&query=${{encodeURIComponent(pt.lat + ',' + pt.lon)}}`;
     }}
     function showPoint(pt) {{
-      detail.innerHTML = `<strong>${{pt.kind}} · ${{pt.ip}}</strong><br>${{pt.location}}<br>${{pt.network}}<br>${{pt.flags}}<br>${{pt.seen || ''}}<br><a href="${{googleUrl(pt)}}" target="_blank" rel="noreferrer">Abrir en Google Maps</a>`;
+      detail.innerHTML = `<strong>${{pt.kind}} · ${{pt.ip}}</strong><br>${{pt.location}}<br>${{pt.network}}<br>${{pt.flags}}<br><small>${{pt.precision || 'precision geografica limitada'}}</small><br>${{pt.seen || ''}}<br><a href="${{googleUrl(pt)}}" target="_blank" rel="noreferrer">Abrir en Google Maps</a>`;
       map.src = mapUrl(pt);
     }}
     function resize() {{
@@ -2606,10 +2683,10 @@ class Dashboard(tk.Tk):
         ip_prefix = "IP PUBLICA CAMBIADA" if changed else "IP publica"
         self.ip_vars["ip"].set(f"{ip_prefix}: {snapshot.ip} ({snapshot.provider})")
         self.ip_vars["location"].set(
-            f"Ubicacion: {snapshot.location_line} · {snapshot.latitude}, {snapshot.longitude} · {snapshot.timezone}"
+            f"Ubicacion: {snapshot.full_location_line} · {snapshot.latitude}, {snapshot.longitude} · {snapshot.timezone}"
         )
         self.ip_vars["network"].set(
-            f"Red: ASN {snapshot.asn or '-'} · ISP {snapshot.isp or '-'} · Org {snapshot.org or '-'} · rDNS {snapshot.reverse_dns or '-'}"
+            f"Red: ASN {snapshot.asn or '-'} · ISP {snapshot.isp or '-'} · Empresa {snapshot.company or snapshot.org or '-'} · rDNS {snapshot.reverse_dns or '-'}"
         )
         self.ip_vars["flags"].set(f"Flags: {snapshot.flags_line} · moneda {snapshot.currency or '-'}")
         if snapshot.is_tor:
@@ -3059,11 +3136,21 @@ class Dashboard(tk.Tk):
                 [
                     f"IP PUBLICA VISIBLE: {snapshot.ip}",
                     f"Ubicacion: {snapshot.location_line}",
+                    f"Region: {snapshot.region or '-'}",
+                    f"Barrio/distrito: {snapshot.neighborhood or snapshot.district or '-'}",
+                    f"Plaza: {snapshot.square or '-'}",
+                    f"Calle: {snapshot.street or '-'}",
+                    f"Carretera/road: {snapshot.road or '-'}",
+                    f"Codigo postal: {snapshot.postal_code or '-'}",
+                    f"Precision: {snapshot.address_precision or 'no disponible'}",
                     f"Coordenadas: {snapshot.latitude}, {snapshot.longitude}",
                     f"Zona horaria: {snapshot.timezone}",
                     f"ASN: {snapshot.asn}",
                     f"ISP: {snapshot.isp}",
                     f"Organizacion: {snapshot.org}",
+                    f"Empresa registrada: {snapshot.company or '-'} ({snapshot.company_type or '-'})",
+                    f"Dominio empresa: {snapshot.company_domain or '-'}",
+                    f"Red CIDR: {snapshot.network_cidr or '-'}",
                     f"Reverse DNS: {snapshot.reverse_dns}",
                     f"Flags: {snapshot.flags_line}",
                     f"Proveedor geo: {snapshot.provider}",
@@ -3290,40 +3377,57 @@ class Dashboard(tk.Tk):
         history = self.ip_history_store.load()
         win = tk.Toplevel(self)
         win.title("Historial de IP publica")
-        win.geometry("980x420")
+        win.geometry("1500x520")
         win.columnconfigure(0, weight=1)
         win.rowconfigure(0, weight=1)
-        columns = ("ip", "location", "first_seen", "last_seen", "duration", "observations")
+        columns = (
+            "ip", "provider", "city", "region", "neighborhood", "road", "isp", "first_seen", "last_seen", "duration", "observations"
+        )
         tree = ttk.Treeview(win, columns=columns, show="headings")
         headings = {
             "ip": "IP",
-            "location": "Ubicacion",
+            "provider": "Proveedor",
+            "city": "Ciudad",
+            "region": "Region",
+            "neighborhood": "Barrio/distrito",
+            "road": "Calle/carretera",
+            "isp": "ISP",
             "first_seen": "Primer visto",
             "last_seen": "Ultimo visto",
             "duration": "Tiempo desde cambio",
             "observations": "Obs.",
         }
-        widths = {"ip": 140, "location": 220, "first_seen": 190, "last_seen": 190, "duration": 140, "observations": 60}
+        widths = {
+            "ip": 140, "provider": 100, "city": 150, "region": 150, "neighborhood": 180,
+            "road": 190, "isp": 190, "first_seen": 190, "last_seen": 190, "duration": 140, "observations": 60,
+        }
         for col in columns:
             tree.heading(col, text=headings[col])
-            tree.column(col, width=widths[col], stretch=col == "location")
+            tree.column(col, width=widths[col], stretch=col in {"city", "neighborhood", "road", "isp"})
         tree.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(win, orient="vertical", command=tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=scrollbar.set)
+        xscroll = ttk.Scrollbar(win, orient="horizontal", command=tree.xview)
+        xscroll.grid(row=1, column=0, sticky="ew")
+        tree.configure(xscrollcommand=xscroll.set)
         now = datetime.now().astimezone()
         for item in reversed(history):
             snap = item.get("snapshot") or {}
             first_seen = str(item.get("first_seen") or "")
             first_dt = parse_iso(first_seen)
             duration = human_duration((now - first_dt).total_seconds()) if first_dt else ""
-            location = ", ".join(str(snap.get(key) or "") for key in ("city", "region", "country_code")).strip(", ")
             tree.insert(
                 "",
                 "end",
                 values=(
                     item.get("ip", ""),
-                    location,
+                    snap.get("provider", ""),
+                    snap.get("city", ""),
+                    snap.get("region", ""),
+                    snap.get("neighborhood", "") or snap.get("district", ""),
+                    snap.get("road", "") or snap.get("street", ""),
+                    snap.get("isp", "") or snap.get("org", ""),
                     first_seen,
                     item.get("last_seen", ""),
                     duration,

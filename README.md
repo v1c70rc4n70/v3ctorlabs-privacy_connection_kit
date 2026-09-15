@@ -19,8 +19,11 @@ cd /home/vik/privacy-connection-dashboard
 - Importa proxies desde una URL que pegues manualmente.
 - Muestra proveedor, anonimato, uptime, velocidad/latencia de fuente, riesgo legal y estado local.
 - Muestra la IP publica visible, geolocalizacion, ASN, ISP, rDNS y flags proxy/VPN/Tor/hosting.
+- Amplia la ficha IP con region, ciudad, barrio/distrito, plaza, calle, carretera/road, codigo postal, ISP, empresa registrada, dominio y red CIDR cuando existen.
+- Enriquece las coordenadas con OpenStreetMap/Nominatim para etiquetas de calle y barrio estimadas; nunca presenta una IP como domicilio exacto.
 - Resalta de forma llamativa la IP publica que estas publicando hacia Internet.
 - Guarda historial de cambios de IP publica con tiempo desde cada cambio observado.
+- El historial conserva snapshots completos de IP, ISP, region, ciudad, barrio, calle/road, coordenadas, flags y primer/ultimo visto.
 - Genera mapa local con OpenStreetMap para la IP actual con estilo oscuro `v3ctorlabs`.
 - Genera un globo del mundo interactivo local para IP publica, historial e IPs de proxies geolocalizadas.
 - Muestra un globo animado dentro del dashboard con campo estelar, halo, reticula, pulsos y rutas entre nodos.
