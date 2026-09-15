@@ -41,6 +41,16 @@ BRAND_NAME = "v3ctorlabs"
 APP_NAME = f"{BRAND_NAME} Privacy Connection Dashboard"
 STRIPE_PAYMENT_LINK_ENV = "V3CTORLABS_STRIPE_PAYMENT_LINK"
 STRIPE_DASHBOARD_LINK = "https://dashboard.stripe.com/payment-links"
+STRIPE_PAYMENT_METHODS = (
+    "Tarjeta credito/debito · Visa / Mastercard",
+    "SEPA Direct Debit · EUR",
+    "Bizum · Espana · si esta habilitado en Stripe",
+    "Stablecoin / USDC en red Solana · solo cuentas Stripe elegibles",
+)
+EXTERNAL_CRYPTO_LINK_ENVS = {
+    "Bitcoin": "V3CTORLABS_BITCOIN_PAYMENT_LINK",
+    "Solana": "V3CTORLABS_SOLANA_PAYMENT_LINK",
+}
 APP_DIR = Path.home() / ".local" / "share" / "privacy-connection-dashboard"
 PAYMENT_STATE_FILE = APP_DIR / "payment-state.json"
 LIFETIME_MINIMUM_EUR = 5
@@ -2657,6 +2667,38 @@ class Dashboard(tk.Tk):
             return f"PRUEBA ACTIVA · quedan {human_duration(remaining)} · luego lifetime desde 5 EUR"
         return "PRUEBA pendiente · lifetime desde 5 EUR"
 
+    def payment_methods_text(self) -> str:
+        lines = [
+            "KAFE-LIFETIME · PAGO UNICO DESDE 5,00 EUR",
+            "",
+            "METODOS EN STRIPE CHECKOUT",
+            *[f"- {method}" for method in STRIPE_PAYMENT_METHODS],
+            "",
+            "CRIPTO",
+            "- Bitcoin nativo: requiere un procesador o enlace externo; no se anuncia como Stripe Checkout.",
+            "- Solana: Stripe documenta stablecoins, no una promesa general de SOL nativo.",
+            "",
+            "La pagina Stripe solo mostrara los metodos que tu cuenta, pais, moneda y enlace tengan habilitados.",
+            "Bizum necesita cuenta/cliente compatible en Espana y SEPA usa una cuenta bancaria EUR.",
+            "",
+            self.payment_status_text(),
+        ]
+        return "\n".join(lines)
+
+    def show_payment_methods(self) -> None:
+        lines = [self.payment_methods_text(), "", "CONFIGURACION OPCIONAL EXTERNA"]
+        for label, env_name in EXTERNAL_CRYPTO_LINK_ENVS.items():
+            lines.append(f"- {label}: {os.environ.get(env_name, '').strip() or 'no configurado'} ({env_name})")
+        lines.extend(
+            [
+                "",
+                f"Stripe Dashboard: {STRIPE_DASHBOARD_LINK}",
+                "Activa metodos en Settings > Payments > Payment methods.",
+            ]
+        )
+        self.show_text_window("Metodos de pago kafe-lifetime", "\n".join(lines))
+        self.log("Metodos de pago kafe-lifetime consultados.")
+
     def apply_connection_mode(self, mode: str) -> None:
         config = CONNECTION_MODE_CONFIGS[mode]
         self.connection_mode = mode
@@ -2714,8 +2756,10 @@ class Dashboard(tk.Tk):
                 f"export {STRIPE_PAYMENT_LINK_ENV}=https://buy.stripe.com/TU_LINK_REAL\n\n"
                 "En Stripe crea un Payment Link de tipo Customers choose what to pay,"
                 " one-off, minimo 5 EUR y sin maximo configurado.\n\n"
+                + self.payment_methods_text()
+                + "\n\n"
                 f"Abrir Stripe: {STRIPE_DASHBOARD_LINK}\n\n"
-                + self.payment_status_text(),
+                "Configura el enlace en la variable de entorno y vuelve a abrir la app.",
             )
             self.log("Stripe no configurado: falta V3CTORLABS_STRIPE_PAYMENT_LINK.")
             return
@@ -2739,7 +2783,7 @@ class Dashboard(tk.Tk):
     def show_connection_success(self) -> None:
         window = tk.Toplevel(self)
         window.title("v3ctorlabs // LINK LIVE")
-        window.geometry("560x360")
+        window.geometry("700x400")
         window.configure(bg="#062b20")
         window.transient(self)
         ttk.Label(window, text="LINK LIVE", style="Success.TLabel", padding=(18, 14)).pack(fill="x", padx=18, pady=(18, 10))
@@ -2768,6 +2812,7 @@ class Dashboard(tk.Tk):
         actions = ttk.Frame(window)
         actions.pack(fill="x", padx=18, pady=18)
         ttk.Button(actions, text="Mapa LINK LIVE", command=self.open_live_map).pack(side="left")
+        ttk.Button(actions, text="Metodos de pago", command=self.show_payment_methods).pack(side="left", padx=8)
         ttk.Button(actions, text="Pagar lifetime 5+ EUR", command=self.open_coffee_link).pack(side="left")
         ttk.Button(actions, text="Ver huella", command=self.show_fingerprint_report).pack(side="left", padx=8)
         ttk.Button(actions, text="Cerrar", command=window.destroy).pack(side="right")

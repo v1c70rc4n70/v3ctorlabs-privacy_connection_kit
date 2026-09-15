@@ -30,6 +30,8 @@ cd /home/vik/privacy-connection-dashboard
 - La guia avanza automaticamente despues de cada paso y termina con una alerta visual `LINK LIVE`, estado verde, pulgar arriba y aplausos.
 - El boton `MAPA LINK LIVE` abre el globo y mapa con badge vivo, IP actual, rutas geo, nodos, historial difuminado y estado `GEO ROUTE ACTIVE`.
 - Incluye `Pagar lifetime 5+ EUR` con Checkout de Stripe configurable mediante `V3CTORLABS_STRIPE_PAYMENT_LINK`.
+- La ventana `Metodos de pago` lista Visa/Mastercard credito o debito, SEPA EUR, Bizum y stablecoin/USDC en Solana cuando Stripe los habilita.
+- Bitcoin nativo y SOL nativo se tratan como enlaces externos opcionales, no como metodos Stripe garantizados.
 - Genera un informe de huella digital separando datos medidos, posibles observables del navegador y limites del dashboard.
 - Conserva memoria local de sesiones guiadas, telemetria, tests e historial para recomendar mejoras operativas.
 - En el globo grande puedes arrastrar para rotar, usar rueda para zoom y pulsar una IP para ver detalle, mapa con zoom y enlace a Google Maps.
@@ -200,6 +202,18 @@ En Stripe crea un Payment Link de tipo `Customers choose what to pay`, precio
 operativos a los pagos pay-what-you-want; el dashboard de Stripe es la autoridad
 para ese limite. Este flujo usa el trial local y luego un pago unico, porque los
 trials nativos de Stripe pertenecen a suscripciones y no a una donacion one-off.
+
+Stripe mostrara dinamicamente los metodos compatibles con tu cuenta, pais, moneda
+y enlace. Bizum es para clientes compatibles en Espana; SEPA usa cuentas EUR.
+Stripe Crypto documenta stablecoins y actualmente requiere elegibilidad de cuenta
+para aceptar pagos; no confundas USDC en Solana con SOL o Bitcoin nativos.
+
+Para enlaces externos opcionales:
+
+```bash
+export V3CTORLABS_BITCOIN_PAYMENT_LINK="https://tu-procesador-bitcoin/checkout"
+export V3CTORLABS_SOLANA_PAYMENT_LINK="https://tu-procesador-solana/checkout"
+```
 
 ## Selector dinamico de tipos de proxy
 
