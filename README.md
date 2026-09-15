@@ -22,6 +22,7 @@ cd /home/vik/privacy-connection-dashboard
 - Amplia la ficha IP con region, ciudad, barrio/distrito, plaza, calle, carretera/road, codigo postal, ISP, empresa registrada, dominio y red CIDR cuando existen.
 - Enriquece las coordenadas con OpenStreetMap/Nominatim para etiquetas de calle y barrio estimadas; nunca presenta una IP como domicilio exacto.
 - Resalta de forma llamativa la IP publica que estas publicando hacia Internet.
+- Mantiene un HUD flotante siempre visible arriba a la derecha con IP publica expuesta, direccion de salida, geolocalizacion, pais/mundo y estado protegido.
 - Muestra en grande `IP PROTEGIDA: SI/NO`, la IP publica, direccion geo completa estimada y contador de historial.
 - Guarda historial de cambios de IP publica con tiempo desde cada cambio observado.
 - El historial conserva snapshots completos de IP, ISP, region, ciudad, barrio, calle/road, coordenadas, flags y primer/ultimo visto.

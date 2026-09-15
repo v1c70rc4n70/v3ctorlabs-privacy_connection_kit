@@ -1952,6 +1952,7 @@ class Dashboard(tk.Tk):
 
         self._configure_theme()
         self._build_ui()
+        self._build_ip_hud()
         self._load_initial()
         self.after(150, self._drain_queue)
         self.after(80, self.animate_dashboard_globe)
@@ -2426,6 +2427,100 @@ class Dashboard(tk.Tk):
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=5)
         ttk.Entry(parent, textvariable=self.fields[key]).grid(row=row, column=1, columnspan=2, sticky="ew", pady=5)
 
+    def _build_ip_hud(self) -> None:
+        """Keep the currently exposed public exit visible in a top-right HUD."""
+        self.ip_hud = tk.Toplevel(self)
+        self.ip_hud.title("IP publica expuesta // v3ctorlabs")
+        self.ip_hud.configure(bg="#1b0d2b")
+        self.ip_hud.resizable(False, False)
+        self.ip_hud.attributes("-topmost", True)
+        self.ip_hud.protocol("WM_DELETE_WINDOW", self.ip_hud.withdraw)
+        self.ip_hud_vars: dict[str, tk.StringVar] = {
+            "status": tk.StringVar(value="ESTADO: esperando IP publica"),
+            "ip": tk.StringVar(value="IP PUBLICA EXPUESTA: sin consultar"),
+            "exit": tk.StringVar(value="DIRECCION DE SALIDA: sin consultar"),
+            "geo": tk.StringVar(value="GEOLOCALIZACION: sin consultar"),
+            "world": tk.StringVar(value="PAIS / MUNDO: sin consultar"),
+            "address": tk.StringVar(value="DIRECCION ESTIMADA: sin consultar"),
+            "updated": tk.StringVar(value="Actualizada: -"),
+        }
+        self.ip_hud_labels: list[tk.Label] = []
+        header = tk.Label(
+            self.ip_hud,
+            text="v3ctorlabs // PUBLIC EXIT MONITOR",
+            bg="#1b0d2b",
+            fg="#42ffbf",
+            font=("DejaVu Sans Mono", 10, "bold"),
+            anchor="w",
+            padx=12,
+            pady=8,
+        )
+        header.pack(fill="x")
+        self.ip_hud_labels.append(header)
+        status = tk.Label(
+            self.ip_hud,
+            textvariable=self.ip_hud_vars["status"],
+            bg="#1b0d2b",
+            fg="#ff4fd8",
+            font=("DejaVu Sans Mono", 13, "bold"),
+            anchor="w",
+            padx=12,
+            pady=4,
+        )
+        status.pack(fill="x")
+        self.ip_hud_status_label = status
+        self.ip_hud_labels.append(status)
+        for key in ("ip", "exit", "geo", "world", "address", "updated"):
+            label = tk.Label(
+                self.ip_hud,
+                textvariable=self.ip_hud_vars[key],
+                bg="#1b0d2b",
+                fg="#d9faff" if key != "ip" else "#ffffff",
+                font=("DejaVu Sans Mono", 9, "bold" if key in {"ip", "exit"} else "normal"),
+                anchor="w",
+                justify="left",
+                wraplength=430,
+                padx=12,
+                pady=2,
+            )
+            label.pack(fill="x")
+            self.ip_hud_labels.append(label)
+        self.ip_hud.geometry("460x250+0+0")
+        self.ip_hud.update_idletasks()
+        screen_width = self.ip_hud.winfo_screenwidth()
+        screen_height = self.ip_hud.winfo_screenheight()
+        hud_width = self.ip_hud.winfo_width()
+        hud_height = self.ip_hud.winfo_height()
+        self.ip_hud.geometry(f"{hud_width}x{hud_height}+{max(0, screen_width - hud_width - 18)}+18")
+
+    def update_ip_hud(self, snapshot: IpGeoSnapshot) -> None:
+        if not hasattr(self, "ip_hud"):
+            return
+        protected = snapshot.is_tor or snapshot.is_vpn or snapshot.is_proxy
+        status = "IP PROTEGIDA / SALIDA SEGURA" if protected else "IP EXPUESTA / SALIDA NO PROTEGIDA"
+        status_color = "#56ff9a" if protected else "#ff4fd8"
+        background = "#063322" if protected else "#1b0d2b"
+        country = snapshot.country or snapshot.country_code or "pais no detectado"
+        if snapshot.country_code and snapshot.country_code not in country:
+            country = f"{country} ({snapshot.country_code})"
+        self.ip_hud_vars["status"].set(status)
+        self.ip_hud_vars["ip"].set(f"IP PUBLICA EXPUESTA: {snapshot.ip}")
+        self.ip_hud_vars["exit"].set(f"DIRECCION DE SALIDA VISIBLE: {snapshot.ip}")
+        self.ip_hud_vars["geo"].set(f"GEOLOCALIZACION: {snapshot.city or '-'} · {snapshot.region or '-'}")
+        self.ip_hud_vars["world"].set(f"PAIS / MUNDO: {country}")
+        self.ip_hud_vars["address"].set(
+            f"DIRECCION ESTIMADA: {snapshot.address_line} · no es domicilio exacto"
+        )
+        self.ip_hud_vars["updated"].set(
+            f"Actualizada: {snapshot.observed_at} · proveedor geo: {snapshot.provider or '-'}"
+        )
+        self.ip_hud.configure(bg=background)
+        for label in self.ip_hud_labels:
+            label.configure(bg=background)
+        self.ip_hud_status_label.configure(fg=status_color)
+        self.ip_hud.deiconify()
+        self.ip_hud.lift()
+
     def _load_initial(self) -> None:
         profiles, encrypted, message = self.store.load(password=None)
         self.profiles = profiles
@@ -2762,6 +2857,7 @@ class Dashboard(tk.Tk):
         changed: bool = False,
     ) -> None:
         self.current_snapshot = snapshot
+        self.update_ip_hud(snapshot)
         protected = snapshot.is_tor or snapshot.is_vpn or snapshot.is_proxy
         ip_prefix = "IP PUBLICA CAMBIADA" if changed else "IP publica"
         protection_label = "SI" if protected else "NO"
